@@ -168,16 +168,18 @@ def main():
 
     dataset = PygGraphPropPredDataset(name=config.dataset_name, root=config.dataset_root)
 
-    # Compute DropGNN paramteres if needed
-    dropgnn_p = 0.0
-    dropgnn_num_runs = 1
-    if config.use_dropgnn:
-        dropgnn_p, dropgnn_num_runs = dropgnn_config(dataset, config.dropgnn_p, config.dropgnn_num_runs)
-
     seq_len_list = np.array([len(seq) for seq in dataset.data.y])
     print('Target seqence less or equal to {} is {}%.'.format(config.max_seq_len, np.sum(seq_len_list <= config.max_seq_len) / len(seq_len_list)))
 
     split_idx = dataset.get_idx_split()
+
+    # Compute DropGNN parameters if needed
+    dropgnn_p = 0.0
+    dropgnn_num_runs = 1
+    if config.use_dropgnn:
+        dropgnn_p, dropgnn_num_runs = dropgnn_config(dataset[split_idx["train"]],
+                                                     config.dropgnn_p,
+                                                     config.dropgnn_num_runs)
 
     ### building vocabulary for sequence predition. Only use training data.
 
