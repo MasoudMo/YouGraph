@@ -5,7 +5,7 @@ export PYTHONIOENCODING=utf-8
 
 echo "Device: $CUDA_VISIBLE_DEVICES"
 dataset="ogbg-code"
-output_dir="../../../epcb_results/ogbg/"
+output_dir="./saved_checkpoints"
 config_file="./"$dataset".json"
 
 time_stamp=`date '+%s'`

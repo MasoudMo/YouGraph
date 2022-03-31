@@ -3,6 +3,7 @@ import torch
 from torch_geometric.data import DataLoader
 from tensorboardX import SummaryWriter
 import torch.optim as optim
+from torch_geometric.utils import degree
 import torch.nn.functional as F
 from torchvision import transforms
 
@@ -100,6 +101,53 @@ def eval(model, device, loader, evaluator, arr_to_seq):
     return evaluator.eval(input_dict)
 
 
+def dropgnn_config(dataset, p, num_runs):
+    # Calculate the required properties if DropGNN is used
+    # This is the implementation from https://arxiv.org/abs/2111.06283
+
+    n = list()
+    degs = list()
+
+    for g in dataset:
+        deg = degree(g.edge_index[0], g.num_nodes, dtype=torch.long)
+        n.append(g.num_nodes)
+        degs.append(deg.max())
+
+    # Compute and print the statistics of the dataset
+    mean_deg = torch.stack(degs).float().mean()
+    print("DropGNN - Mean degree: {}".format(mean_deg))
+
+    max_deg = torch.stack(degs).max()
+    print("DropGNN - Max degree: {}".format(max_deg))
+
+    min_deg = torch.stack(degs).min()
+    print("DropGNN - Min degree: {}".format(min_deg))
+
+    mean_n = torch.tensor(n).float().mean().round().long().item()
+    print("DropGNN - Mean number of nodes: {}".format(mean_n))
+
+    max_n = torch.tensor(n).float().max().round().long().item()
+    print("DropGNN - Max number of nodes: {}".format(max_n))
+
+    min_n = torch.tensor(n).float().min().round().long().item()
+    print("DropGNN - Min number of nodes: {}".format(min_n))
+
+    gamma = mean_n
+
+    if p is None:
+        p = 2 * 1 /(1+gamma)
+        print("DropGNN - Recommended p: {}".format(p))
+
+    if num_runs is None:
+        num_runs = gamma
+        print("DropGNN - Recommended Number of Runs: {}".format(num_runs))
+
+    print("DropGNN - Chosen Number of Runs: {}".format(num_runs))
+    print("DropGNN - Chosen Sampling Probability: {}".format(p))
+
+    return p, num_runs
+
+
 def main():
     args = get_args()
     config = process_config(args)
@@ -118,7 +166,11 @@ def main():
 
     #sys.stdin = In()
 
-    dataset = PygGraphPropPredDataset(name=config.dataset_name)
+    dataset = PygGraphPropPredDataset(name=config.dataset_name, root=config.dataset_root)
+
+    # Compute DropGNN paramteres if needed
+    if config.use_dropgnn:
+        dropgnn_p, dropgnn_num_runes = dropgnn_config(dataset, config.dropgnn_p, config.dropgnn_num_runs)
 
     seq_len_list = np.array([len(seq) for seq in dataset.data.y])
     print('Target seqence less or equal to {} is {}%.'.format(config.max_seq_len, np.sum(seq_len_list <= config.max_seq_len) / len(seq_len_list)))
