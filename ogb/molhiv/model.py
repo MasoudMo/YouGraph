@@ -11,7 +11,11 @@ from utils.attention import MultiheadAttention
 class Net(torch.nn.Module):
     def __init__(self,
                  config,
-                 num_tasks):
+                 num_tasks,
+                 drop_gnn=False,
+                 node_dropout_p=0.0,
+                 num_runs=1):
+
         super(Net, self).__init__()
         self.atom_encoder = AtomEncoder(config.hidden)
         self.bond_encoder = BondEncoder(emb_dim=config.hidden)
@@ -67,9 +71,13 @@ class Net(torch.nn.Module):
                         ,torch.nn.PReLU()
                         ,torch.nn.Linear(emb_dim, 1)))
 
-
         self.dropout = config.dropout
-        
+
+        # Attributes related to node dropout
+        self.drop_gnn = drop_gnn
+        self.node_dropout_p = node_dropout_p
+        self.num_runs = num_runs
+
         # virtualnode
         if self.config.virtual_node == 'true':
             self.virtualnode_embedding = torch.nn.Embedding(1, config.hidden)
@@ -89,6 +97,27 @@ class Net(torch.nn.Module):
         x, edge_index, edge_attr, batch, mgf_maccs_pred = batched_data.x, batched_data.edge_index, batched_data.edge_attr, batched_data.batch, batched_data.y[:,2]
         #edge_attr = self.bond_encoder(edge_attr)
         x = self.atom_encoder(x) + perturb if perturb is not None else self.atom_encoder(x)
+
+        # Change data, edge_index, edge_attr and batch to add dropout and account for number of required runs
+        if self.drop_gnn:
+            # Clone the data num_runes times so that runs can be done in parallel
+            x = x.unsqueeze(0).expand(self.num_runs, -1, -1).clone()
+
+            # Drop nodes randomly
+            drop = torch.bernoulli(torch.ones([x.size(0), x.size(1)], device=x.device) * self.node_dropout_p).bool()
+            x[drop] = torch.zeros([drop.sum().long().item(), x.size(-1)], device=x.device)
+            x = x.view(-1, x.size(-1))
+            del drop
+
+            # Make proper edge_index and edge_attr for the replicated data
+            edge_index = edge_index.repeat(1, self.num_runs) + torch.arange(self.num_runs,
+                                                                            device=edge_index.device).repeat_interleave(
+                edge_index.size(1)) * (edge_index.max() + 1)
+            edge_attr = edge_attr.repeat((self.num_runs, 1))
+
+            # Replicate batch indices to account for number of runs
+            batch = batch.repeat(self.num_runs)
+
         xs = [x]
         if self.config.virtual_node == 'true':
             virtualnode_embedding = self.virtualnode_embedding(
@@ -104,6 +133,12 @@ class Net(torch.nn.Module):
                 virtualnode_embedding = F.dropout(self.mlp_virtualnode_list[i](virtualnode_embedding_tmp), p=self.dropout, training=self.training)
 
         nr = self.JK(xs)
+
+        # Need to average over the parallel runs if DropGNN was used
+        if self.drop_gnn:
+            nr = nr.view(self.num_runs, -1, nr.size(-1))
+            nr = nr.mean(dim=0)
+
         nr = F.dropout(nr, p=self.dropout, training=self.training)
         h_graph = self.pool(nr, batched_data.batch)
         #h_graph = F.dropout(h_graph, p=self.dropout, training=self.training)

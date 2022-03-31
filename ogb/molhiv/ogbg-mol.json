@@ -1,7 +1,11 @@
 {
   "dataset_name": "ogbg-molhiv",
+  "dataset_root": "./dataset",
   "num_workers": 2,
   "feature": "full",
+  "use_dropgnn": true,
+  "dropgnn_p": null,
+  "dropgnn_num_runs": null,
   "hyperparams": {
     "batch_size": 2048,
     "epochs": 12,

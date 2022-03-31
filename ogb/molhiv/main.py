@@ -6,7 +6,7 @@ import numpy as np
 ### importing OGB
 from ogb.graphproppred import PygGraphPropPredDataset, Evaluator
 import torch.optim as optim
-
+from torch_geometric.utils import degree
 import sys
 sys.path.append('../..')
 
@@ -84,6 +84,53 @@ def eval(model, device, loader, evaluator):
     return evaluator.eval(input_dict)
 
 
+def dropgnn_config(dataset, p, num_runs):
+    # Calculate the required properties if DropGNN is used
+    # This is the implementation from https://arxiv.org/abs/2111.06283
+
+    n = list()
+    degs = list()
+
+    for g in dataset:
+        deg = degree(g.edge_index[0], g.num_nodes, dtype=torch.long)
+        n.append(g.num_nodes)
+        degs.append(deg.max())
+
+    # Compute and print the statistics of the dataset
+    mean_deg = torch.stack(degs).float().mean()
+    print("DropGNN - Mean degree: {}".format(mean_deg))
+
+    max_deg = torch.stack(degs).max()
+    print("DropGNN - Max degree: {}".format(max_deg))
+
+    min_deg = torch.stack(degs).min()
+    print("DropGNN - Min degree: {}".format(min_deg))
+
+    mean_n = torch.tensor(n).float().mean().round().long().item()
+    print("DropGNN - Mean number of nodes: {}".format(mean_n))
+
+    max_n = torch.tensor(n).float().max().round().long().item()
+    print("DropGNN - Max number of nodes: {}".format(max_n))
+
+    min_n = torch.tensor(n).float().min().round().long().item()
+    print("DropGNN - Min number of nodes: {}".format(min_n))
+
+    gamma = mean_n
+
+    if p is None:
+        p = 2 * 1 / (1 + gamma)
+        print("DropGNN - Recommended p: {}".format(p))
+
+    if num_runs is None:
+        num_runs = gamma
+        print("DropGNN - Recommended Number of Runs: {}".format(num_runs))
+
+    print("DropGNN - Chosen Number of Runs: {}".format(num_runs))
+    print("DropGNN - Chosen Sampling Probability: {}".format(p))
+
+    return p, num_runs
+
+
 def main(mgf_maccs_pred, best_test, best_val):
     args = get_args()
     config = process_config(args)
@@ -99,7 +146,7 @@ def main(mgf_maccs_pred, best_test, best_val):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     ### automatic dataloading and splitting
-    dataset = PygGraphPropPredDataset(name=config.dataset_name)
+    dataset = PygGraphPropPredDataset(name=config.dataset_name, root=config.dataset_root)
     #####
     #mgf_maccs_pred = np.load("rf_preds/rf_pred_auc_0.8289_0.8150.npy")
     dataset.data.y = torch.cat((dataset.data.y, torch.from_numpy(mgf_maccs_pred)), 1)
@@ -113,6 +160,14 @@ def main(mgf_maccs_pred, best_test, best_val):
 
     split_idx = dataset.get_idx_split()
 
+    # Compute DropGNN parameters if needed
+    dropgnn_p = 0.0
+    dropgnn_num_runs = 1
+    if config.use_dropgnn:
+        dropgnn_p, dropgnn_num_runs = dropgnn_config(dataset[split_idx["train"]],
+                                                     config.dropgnn_p,
+                                                     config.dropgnn_num_runs)
+
     ### automatic evaluator. takes dataset name as input
     evaluator = Evaluator(config.dataset_name)
 
@@ -123,7 +178,11 @@ def main(mgf_maccs_pred, best_test, best_val):
     test_loader = DataLoader(dataset[split_idx["test"]], batch_size=config.hyperparams.batch_size, shuffle=False,
                              num_workers=config.num_workers)
 
-    model = Net(config.architecture, num_tasks=dataset.num_tasks).to(device)
+    model = Net(config.architecture,
+                num_tasks=dataset.num_tasks,
+                drop_gnn=config.use_dropgnn,
+                node_dropout_p=dropgnn_p,
+                num_runs=dropgnn_num_runs).to(device)
 
     num_params = sum(p.numel() for p in model.parameters())
     print(f'#Params: {num_params}')
