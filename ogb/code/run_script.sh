@@ -15,7 +15,7 @@ std_file=${output_dir}"stdout/"${time_stamp}_${commit_id}".txt"
 #mkdir -p $output_dir"stdout/"
 
 #nohup python3 -u ./main.py --config=$config_file --id=$commit_id --ts=$time_stamp --dir=$output_dir"board/" >> $std_file 2>&1 &
-python -u ./main.py --config=$config_file --id=$commit_id --ts=$time_stamp --dir=$output_dir"board/"
+python3 -u ./main.py --config=$config_file --id=$commit_id --ts=$time_stamp --dir=$output_dir"board/"
 
 #pid=$!
 
