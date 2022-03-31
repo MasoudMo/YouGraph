@@ -1,9 +1,13 @@
 {
   "dataset_name": "ogbg-ppa",
+  "dataset_root": "./dataset",
   "seed": 777,
   "num_workers": 2,
   "feature": "full",
   "save": "true",
+  "use_dropgnn": true,
+  "dropgnn_p": null,
+  "dropgnn_num_runs": null,
   "hyperparams": {
     "batch_size": 24,
     "epochs": 200,

@@ -9,7 +9,10 @@ from torch.nn import PReLU, ReLU, BatchNorm1d as BN
 class Net(torch.nn.Module):
     def __init__(self,
                  config,
-                 num_class):
+                 num_class,
+                 drop_gnn=False,
+                 node_dropout_p=0.0,
+                 num_runs=1):
         super(Net, self).__init__()
         self.node_encoder = torch.nn.Embedding(1, config.hidden)
 
@@ -69,6 +72,11 @@ class Net(torch.nn.Module):
 
         self.dropout = config.dropout
 
+        # Attributes related to node dropout
+        self.drop_gnn = drop_gnn
+        self.node_dropout_p = node_dropout_p
+        self.num_runs = num_runs
+
     def forward(self, batched_data, perturb=None):
         x, edge_index, edge_attr, batch = batched_data.x, batched_data.edge_index, batched_data.edge_attr, batched_data.batch
         x = self.node_encoder(x) + perturb if perturb is not None else self.node_encoder(x)
@@ -91,11 +99,14 @@ class Net(torch.nn.Module):
         return self.__class__.__name__
 
 
-
 class VirtualnodeNet(torch.nn.Module):
     def __init__(self,
                  config,
-                 num_class):
+                 num_class,
+                 drop_gnn=False,
+                 node_dropout_p=0.0,
+                 num_runs=1):
+
         super(VirtualnodeNet, self).__init__()
         self.node_encoder = torch.nn.Embedding(1, config.hidden)
 
@@ -138,6 +149,12 @@ class VirtualnodeNet(torch.nn.Module):
             self.pool = global_max_pool
 
         self.dropout = config.dropout
+
+        # Attributes related to node dropout
+        self.drop_gnn = drop_gnn
+        self.node_dropout_p = node_dropout_p
+        self.num_runs = num_runs
+
         # virtualnode
         self.virtualnode_embedding = torch.nn.Embedding(1, config.hidden)
         torch.nn.init.constant_(self.virtualnode_embedding.weight.data, 0)
@@ -154,8 +171,29 @@ class VirtualnodeNet(torch.nn.Module):
 
     def forward(self, batched_data, perturb=None):
         x, edge_index, edge_attr, batch = batched_data.x, batched_data.edge_index, batched_data.edge_attr, batched_data.batch
-        tmp = self.node_encoder(x) + perturb if perturb is not None else self.node_encoder(x)
-        xs = [tmp]
+        x = self.node_encoder(x) + perturb if perturb is not None else self.node_encoder(x)
+
+        # Change data, edge_index, edge_attr and batch to add dropout and account for number of required runs
+        if self.drop_gnn:
+            # Clone the data num_runes times so that runs can be done in parallel
+            x = x.unsqueeze(0).expand(self.num_runs, -1, -1).clone()
+
+            # Drop nodes randomly
+            drop = torch.bernoulli(torch.ones([x.size(0), x.size(1)], device=x.device) * self.node_dropout_p).bool()
+            x[drop] = torch.zeros([drop.sum().long().item(), x.size(-1)], device=x.device)
+            x = x.view(-1, x.size(-1))
+            del drop
+
+            # Make proper edge_index and edge_attr for the replicated data
+            edge_index = edge_index.repeat(1, self.num_runs) + torch.arange(self.num_runs,
+                                                                            device=edge_index.device).repeat_interleave(
+                edge_index.size(1)) * (edge_index.max() + 1)
+            edge_attr = edge_attr.repeat((self.num_runs, 1))
+
+            # Replicate batch indices to account for number of runs
+            batch = batch.repeat(self.num_runs)
+
+        xs = [x]
         ### virtual node embeddings for graphs
         virtualnode_embedding = self.virtualnode_embedding(
             torch.zeros(batch[-1].item() + 1).to(edge_index.dtype).to(edge_index.device))
@@ -169,6 +207,12 @@ class VirtualnodeNet(torch.nn.Module):
                 virtualnode_embedding = F.dropout(self.mlp_virtualnode_list[i](virtualnode_embedding_tmp), p=self.dropout, training=self.training)
 
         nr = self.JK(xs[1:])
+
+        # Need to average over the parallel runs if DropGNN was used
+        if self.drop_gnn:
+            nr = nr.view(self.num_runs, -1, nr.size(-1))
+            nr = nr.mean(dim=0)
+
         nr = F.dropout(nr, p=self.dropout, training=self.training)
         h_graph = self.pool(nr, batched_data.batch)
         return self.graph_pred_linear(h_graph) / self.config.T
