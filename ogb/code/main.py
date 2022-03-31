@@ -213,7 +213,9 @@ def main():
                 node_encoder=node_encoder,
                 dropgnn=config.use_dropgnn,
                 dropgnn_dropout_p=dropgnn_p,
-                dropgnn_num_runs=dropgnn_num_runs).to(device)
+                dropgnn_num_runs=dropgnn_num_runs,
+                nodeskip=config.use_nodeskip,
+                nodeskip_dropout_p=config.nodeskip_p).to(device)
     
     num_params = sum(p.numel() for p in model.parameters())
     print(f'#Params: {num_params}')

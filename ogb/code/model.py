@@ -1,9 +1,13 @@
+import itertools
+
 import torch
 import torch.nn.functional as F
 from torch.nn import Linear, Sequential, PReLU, ReLU, ELU, Sigmoid
 from utils.jumping_knowledge import JumpingKnowledge
 from torch_geometric.nn import global_add_pool, global_mean_pool
+from torch_geometric.utils import to_dense_adj, dense_to_sparse, coalesce
 from conv import AttenConv, GinConv, ExpC, CombC, ExpC_star, CombC_star
+import numpy as np
 
 
 class Net(torch.nn.Module):
@@ -14,7 +18,9 @@ class Net(torch.nn.Module):
                  node_encoder,
                  dropgnn=False,
                  dropgnn_dropout_p=0.0,
-                 dropgnn_num_runs=1):
+                 dropgnn_num_runs=1,
+                 nodeskip=False,
+                 nodeskip_dropout_p=0.0):
 
         super(Net, self).__init__()
 
@@ -71,6 +77,8 @@ class Net(torch.nn.Module):
         self.dropgnn = dropgnn
         self.dropgnn_dropout_p = dropgnn_dropout_p
         self.dropgnn_num_runs = dropgnn_num_runs
+        self.nodeskip = nodeskip
+        self.nodeskip_dropout_p = nodeskip_dropout_p
         
         # virtualnode
         if self.config.virtual_node == 'true':
@@ -96,6 +104,37 @@ class Net(torch.nn.Module):
         x, edge_index, edge_attr, node_depth, batch = batched_data.x, batched_data.edge_index, batched_data.edge_attr, batched_data.node_depth, batched_data.batch
 
         x = self.node_encoder(x, node_depth.view(-1,))
+
+        if self.nodeskip:
+            # Drop nodes randomly
+            drop = torch.bernoulli(torch.ones([x.size(0)], device=x.device) * self.nodeskip_dropout_p).bool()
+            x[drop] = torch.zeros([drop.sum().long().item(), x.size(-1)], device=x.device)
+
+            # Augment edges resulting for removal of each node
+            dropped_nodes = np.where(drop.detach().cpu().numpy() == 1)[0]
+            temp_edge_index = edge_index.detach().cpu().numpy()
+            for node in dropped_nodes:
+
+                # Find the nodes where the new edges would go to
+                destination_idx = np.where(temp_edge_index[0] == node)[0]
+                destination_nodes = temp_edge_index[1, destination_idx]
+
+                # Find the nodes where the new edges originate from
+                source_idx = np.where(temp_edge_index[1] == node)[0]
+                source_nodes = temp_edge_index[0, source_idx]
+
+                # Add the new edges to edge_index
+                new_edges = np.transpose(np.array(list(itertools.product(source_nodes.tolist(),
+                                                                         destination_nodes.tolist())), dtype=np.float))
+                edge_index = torch.concat((edge_index, torch.tensor(new_edges,
+                                                                    dtype=edge_index.dtype,
+                                                                    device=edge_index.device)), dim=1)
+
+                # Add the edge attribute for the newly added edges
+                edge_attr = torch.concat((edge_attr,
+                                          torch.tensor([[2, 2]],
+                                                       dtype=edge_attr.dtype,
+                                                       device=edge_attr.device).repeat(new_edges.shape[1], 1)), dim=0)
 
         # Change data, edge_index, edge_attr and batch to add dropout and account for number of required runs
         if self.dropgnn:
