@@ -1,6 +1,6 @@
 {
   "dataset_name": "ogbg-code2",
-  "dataset_root": "D:\\Workspace\\RCL\\datasets\\ogb",
+  "dataset_root": "./dataset",
   "seed": 777,
   "num_workers": 4,
   "feature": "full",
