@@ -211,9 +211,9 @@ def main():
                 num_vocab=len(vocab2idx),
                 max_seq_len=config.max_seq_len,
                 node_encoder=node_encoder,
-                drop_gnn=config.use_dropgnn,
-                node_dropout_p=dropgnn_p,
-                num_runs=dropgnn_num_runs).to(device)
+                dropgnn=config.use_dropgnn,
+                dropgnn_dropout_p=dropgnn_p,
+                dropgnn_num_runs=dropgnn_num_runs).to(device)
     
     num_params = sum(p.numel() for p in model.parameters())
     print(f'#Params: {num_params}')

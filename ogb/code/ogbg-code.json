@@ -1,6 +1,6 @@
 {
   "dataset_name": "ogbg-code2",
-  "dataset_root": "./dataset",
+  "dataset_root": "D:\\Workspace\\RCL\\datasets\\ogb",
   "seed": 777,
   "num_workers": 4,
   "feature": "full",
@@ -9,6 +9,8 @@
   "use_dropgnn": true,
   "dropgnn_p": null,
   "dropgnn_num_runs": null,
+  "use_nodeskip": false,
+  "nodeskip_p": 0.0,
   "hyperparams": {
     "batch_size": 64,
     "epochs": 50,

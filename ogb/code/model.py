@@ -12,9 +12,9 @@ class Net(torch.nn.Module):
                  num_vocab,
                  max_seq_len,
                  node_encoder,
-                 drop_gnn=False,
-                 node_dropout_p=0.0,
-                 num_runs=1):
+                 dropgnn=False,
+                 dropgnn_dropout_p=0.0,
+                 dropgnn_num_runs=1):
 
         super(Net, self).__init__()
 
@@ -68,9 +68,9 @@ class Net(torch.nn.Module):
         self.dropout = config.dropout
 
         # Attributes related to node dropout
-        self.drop_gnn = drop_gnn
-        self.node_dropout_p = node_dropout_p
-        self.num_runs = num_runs
+        self.dropgnn = dropgnn
+        self.dropgnn_dropout_p = dropgnn_dropout_p
+        self.dropgnn_num_runs = dropgnn_num_runs
         
         # virtualnode
         if self.config.virtual_node == 'true':
@@ -98,25 +98,26 @@ class Net(torch.nn.Module):
         x = self.node_encoder(x, node_depth.view(-1,))
 
         # Change data, edge_index, edge_attr and batch to add dropout and account for number of required runs
-        if self.drop_gnn:
+        if self.dropgnn:
 
             # Clone the data num_runes times so that runs can be done in parallel
-            x = x.unsqueeze(0).expand(self.num_runs, -1, -1).clone()
+            x = x.unsqueeze(0).expand(self.dropgnn_num_runs, -1, -1).clone()
 
             # Drop nodes randomly
-            drop = torch.bernoulli(torch.ones([x.size(0), x.size(1)], device=x.device) * self.node_dropout_p).bool()
+            drop = torch.bernoulli(torch.ones([x.size(0), x.size(1)], device=x.device) * self.dropgnn_dropout_p).bool()
             x[drop] = torch.zeros([drop.sum().long().item(), x.size(-1)], device=x.device)
             x = x.view(-1, x.size(-1))
             del drop
 
             # Make proper edge_index and edge_attr for the replicated data
-            edge_index = edge_index.repeat(1, self.num_runs) + torch.arange(self.num_runs,
-                                                                            device=edge_index.device).repeat_interleave(
-                                                                            edge_index.size(1)) * (edge_index.max() + 1)
-            edge_attr = edge_attr.repeat((self.num_runs, 1))
+            edge_index = edge_index.repeat(1, self.dropgnn_num_runs) + \
+                         torch.arange(self.dropgnn_num_runs,
+                                      device=edge_index.device).repeat_interleave(edge_index.size(1)) * \
+                         (edge_index.max() + 1)
+            edge_attr = edge_attr.repeat((self.dropgnn_num_runs, 1))
 
             # Replicate batch indices to account for number of runs
-            batch = batch.repeat(self.num_runs)
+            batch = batch.repeat(self.dropgnn_num_runs)
 
         xs = [x]
         if self.config.virtual_node == 'true':
@@ -133,8 +134,8 @@ class Net(torch.nn.Module):
         nr = self.JK(xs)
 
         # Need to average over the parallel runs if DropGNN was used
-        if self.drop_gnn:
-            nr = nr.view(self.num_runs, -1, nr.size(-1))
+        if self.dropgnn:
+            nr = nr.view(self.dropgnn_num_runs, -1, nr.size(-1))
             nr = nr.mean(dim=0)
 
         nr = F.dropout(nr, p=self.dropout, training=self.training)
