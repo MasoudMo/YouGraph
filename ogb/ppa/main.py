@@ -138,7 +138,7 @@ def main():
 
     ### automatic dataloading and splitting
 
-    dataset = PygGraphPropPredDataset(name=config.dataset_name, transform=add_zeros)
+    dataset = PygGraphPropPredDataset(name=config.dataset_name, transform=add_zeros, root=config.dataset_root)
 
     split_idx = dataset.get_idx_split()
 
