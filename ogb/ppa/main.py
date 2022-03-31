@@ -7,6 +7,7 @@ import numpy as np
 ### importing OGB
 from ogb.graphproppred import PygGraphPropPredDataset, Evaluator
 import datetime
+from torch_geometric.utils import degree
 
 import sys
 sys.path.append('../..')
