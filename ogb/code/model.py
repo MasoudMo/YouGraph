@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from torch.nn import Linear, Sequential, PReLU, ReLU, ELU, Sigmoid
 from utils.jumping_knowledge import JumpingKnowledge
 from torch_geometric.nn import global_add_pool, global_mean_pool
-from torch_geometric.utils import to_dense_adj, dense_to_sparse, coalesce
+from torch_geometric.utils import to_dense_adj, dense_to_sparse, coalesce, sort_edge_index
 from conv import AttenConv, GinConv, ExpC, CombC, ExpC_star, CombC_star
 import numpy as np
 
@@ -135,6 +135,11 @@ class Net(torch.nn.Module):
                                                        dtype=edge_attr.dtype,
                                                        device=edge_attr.device).repeat(new_edges.shape[1], 1)), dim=0)
 
+        edge_index, edge_attr = sort_edge_index(edge_index=edge_index,
+                                                edge_attr=edge_attr,
+                                                num_nodes=batched_data.num_nodes)
+        a = edge_index.detach().cpu().numpy()
+        b = edge_attr.detach().cpu().numpy()
         # Change data, edge_index, edge_attr and batch to add dropout and account for number of required runs
         if self.dropgnn:
 
