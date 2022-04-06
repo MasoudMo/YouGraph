@@ -1,5 +1,4 @@
 import itertools
-
 import torch
 import torch.nn.functional as F
 from torch.nn import Linear, Sequential, PReLU, ReLU, ELU, Sigmoid

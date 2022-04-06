@@ -166,13 +166,17 @@ def main():
                                num_class=dataset.num_classes,
                                drop_gnn=config.use_dropgnn,
                                node_dropout_p=dropgnn_p,
-                               num_runs=dropgnn_num_runs).to(device)
+                               num_runs=dropgnn_num_runs,
+                               nodeskip=config.use_nodeskip,
+                               nodeskip_dropout_p=config.nodeskip_p).to(device)
     else:
         model = Net(config.architecture,
                     num_class=dataset.num_classes,
                     drop_gnn=config.use_dropgnn,
                     node_dropout_p=dropgnn_p,
-                    num_runs=dropgnn_num_runs).to(device)
+                    num_runs=dropgnn_num_runs,
+                    nodeskip=config.use_nodeskip,
+                    nodeskip_dropout_p=config.nodeskip_p).to(device)
 
     num_params = sum(p.numel() for p in model.parameters())
     print(f'#Params: {num_params}')

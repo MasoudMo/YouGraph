@@ -9,8 +9,8 @@
   "use_dropgnn": false,
   "dropgnn_p": null,
   "dropgnn_num_runs": null,
-  "use_nodeskip": true,
-  "nodeskip_p": 0.2,
+  "use_nodeskip": false,
+  "nodeskip_p": 0.0,
   "hyperparams": {
     "batch_size": 2,
     "epochs": 50,
