@@ -28,8 +28,9 @@ class ExpC(MessagePassing):
         self.edge_encoder = torch.nn.Linear(7, hidden)
 
     def forward(self, x, edge_index, edge_attr):
+        edge_index, edge_attr = remove_self_loops(edge_index, edge_attr)
         edge_attr = self.edge_encoder(edge_attr)
-        edge_index, _ = remove_self_loops(edge_index)
+
         # edge_index, _ = add_self_loops(edge_index, num_nodes=x.size(0))
         out = self.propagate(edge_index, x=x, edge_attr=edge_attr)
         if self.BN is not None:
@@ -77,8 +78,9 @@ class ExpC_star(MessagePassing):
         self.edge_encoder = torch.nn.Linear(7, hidden)
 
     def forward(self, x, edge_index, edge_attr):
+        edge_index, edge_attr = remove_self_loops(edge_index, edge_attr)
         edge_attr = self.edge_encoder(edge_attr)
-        edge_index, _ = remove_self_loops(edge_index)
+
         # edge_index, _ = add_self_loops(edge_index, num_nodes=x.size(0))
         out = self.fea_mlp(self.propagate(edge_index, x=x, edge_attr=edge_attr))
         if self.BN is not None:
@@ -124,8 +126,9 @@ class CombC(MessagePassing):
         self.edge_encoder = torch.nn.Linear(7, hidden)
 
     def forward(self, x, edge_index, edge_attr):
+        edge_index, edge_attr = remove_self_loops(edge_index, edge_attr)
         edge_attr = self.edge_encoder(edge_attr)
-        edge_index, _ = remove_self_loops(edge_index)
+
         # edge_index, _ = add_self_loops(edge_index, num_nodes=x.size(0))
         out = self.propagate(edge_index, x=x, edge_attr=edge_attr)
         if self.BN is not None:
@@ -167,8 +170,9 @@ class CombC_star(MessagePassing):
         self.edge_encoder = torch.nn.Linear(7, hidden)
 
     def forward(self, x, edge_index, edge_attr):
+        edge_index, edge_attr = remove_self_loops(edge_index, edge_attr)
         edge_attr = self.edge_encoder(edge_attr)
-        edge_index, _ = remove_self_loops(edge_index)
+
         # edge_index, _ = add_self_loops(edge_index, num_nodes=x.size(0))
         out = self.fea_mlp(self.propagate(edge_index, x=x, edge_attr=edge_attr))
         if self.BN is not None:
@@ -209,8 +213,9 @@ class GinConv(MessagePassing):
         #self.fea_act = PReLU()
 
     def forward(self, x, edge_index, edge_attr):
+        edge_index, edge_attr = remove_self_loops(edge_index, edge_attr)
         edge_attr = self.edge_encoder(edge_attr)
-        edge_index, _ = remove_self_loops(edge_index)
+
         # edge_index, _ = add_self_loops(edge_index, num_nodes=x.size(0))
         #out = self.fea_mlp((1 + self.eps) * x + self.propagate(edge_index, x=x, edge_attr=edge_attr))
         out = self.proj_fea(x) + self.proj_mess(self.propagate(edge_index, x=x, edge_attr=edge_attr))

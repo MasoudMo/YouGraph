@@ -87,6 +87,58 @@ class Net(torch.nn.Module):
     def forward(self, batched_data, perturb=None):
         x, edge_index, edge_attr, batch = batched_data.x, batched_data.edge_index, batched_data.edge_attr, batched_data.batch
         x = self.node_encoder(x) + perturb if perturb is not None else self.node_encoder(x)
+
+        if self.nodeskip:
+            # Drop nodes randomly
+            drop = torch.bernoulli(torch.ones([x.size(0)], device=x.device) * self.nodeskip_dropout_p).bool()
+            x[drop] = torch.zeros([drop.sum().long().item(), x.size(-1)], device=x.device)
+
+            # Augment edges resulting for removal of each node
+            dropped_nodes = np.where(drop.detach().cpu().numpy() == 1)[0]
+            temp_edge_index = edge_index.detach().cpu().numpy()
+            for node in dropped_nodes:
+
+                # Find the nodes where the new edges would go to
+                destination_idx = np.where(temp_edge_index[0] == node)[0]
+                destination_nodes = temp_edge_index[1, destination_idx]
+
+                # Find the nodes where the new edges originate from
+                source_idx = np.where(temp_edge_index[1] == node)[0]
+                source_nodes = temp_edge_index[0, source_idx]
+
+                # Add the new edges to edge_index
+                new_edges = np.transpose(np.array(list(itertools.product(source_nodes.tolist(),
+                                                                         destination_nodes.tolist())), dtype=np.float))
+                edge_index = torch.concat((edge_index, torch.tensor(new_edges,
+                                                                    dtype=edge_index.dtype,
+                                                                    device=edge_index.device)), dim=1)
+
+                # Add the edge attribute for the newly added edges
+                edge_attr = torch.concat((edge_attr,
+                                          torch.tensor([[2, 2]],
+                                                       dtype=edge_attr.dtype,
+                                                       device=edge_attr.device).repeat(new_edges.shape[1], 1)), dim=0)
+
+        # Change data, edge_index, edge_attr and batch to add dropout and account for number of required runs
+        if self.drop_gnn:
+            # Clone the data num_runes times so that runs can be done in parallel
+            x = x.unsqueeze(0).expand(self.num_runs, -1, -1).clone()
+
+            # Drop nodes randomly
+            drop = torch.bernoulli(torch.ones([x.size(0), x.size(1)], device=x.device) * self.node_dropout_p).bool()
+            x[drop] = torch.zeros([drop.sum().long().item(), x.size(-1)], device=x.device)
+            x = x.view(-1, x.size(-1))
+            del drop
+
+            # Make proper edge_index and edge_attr for the replicated data
+            edge_index = edge_index.repeat(1, self.num_runs) + torch.arange(self.num_runs,
+                                                                            device=edge_index.device).repeat_interleave(
+                edge_index.size(1)) * (edge_index.max() + 1)
+            edge_attr = edge_attr.repeat((self.num_runs, 1))
+
+            # Replicate batch indices to account for number of runs
+            batch = batch.repeat(self.num_runs)
+
         if self.config.input_dropout == 'true':
             x = F.dropout(x, p=self.dropout, training=self.training)
         xs = []
@@ -184,7 +236,7 @@ class VirtualnodeNet(torch.nn.Module):
         x, edge_index, edge_attr, batch = batched_data.x, batched_data.edge_index, batched_data.edge_attr, batched_data.batch
         x = self.node_encoder(x) + perturb if perturb is not None else self.node_encoder(x)
 
-        if self.nodeskip:
+        if self.nodeskip and self.training:
             # Drop nodes randomly
             drop = torch.bernoulli(torch.ones([x.size(0)], device=x.device) * self.nodeskip_dropout_p).bool()
             x[drop] = torch.zeros([drop.sum().long().item(), x.size(-1)], device=x.device)
@@ -211,7 +263,7 @@ class VirtualnodeNet(torch.nn.Module):
 
                 # Add the edge attribute for the newly added edges
                 edge_attr = torch.concat((edge_attr,
-                                          torch.tensor([[2, 2]],
+                                          torch.tensor([[0, 0, 0, 0, 0, 0, 0]],
                                                        dtype=edge_attr.dtype,
                                                        device=edge_attr.device).repeat(new_edges.shape[1], 1)), dim=0)
 

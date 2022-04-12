@@ -104,7 +104,7 @@ class Net(torch.nn.Module):
         #edge_attr = self.bond_encoder(edge_attr)
         x = self.atom_encoder(x) + perturb if perturb is not None else self.atom_encoder(x)
 
-        if self.nodeskip:
+        if self.nodeskip and self.training:
             # Drop nodes randomly
             drop = torch.bernoulli(torch.ones([x.size(0)], device=x.device) * self.nodeskip_dropout_p).bool()
             x[drop] = torch.zeros([drop.sum().long().item(), x.size(-1)], device=x.device)
