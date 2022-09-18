@@ -1,3 +1,8 @@
+# Node Skip: A Node Dropout Algorithm to Increase GNNs Generalizability
+This is a modified version of YouGraph code to add a novel node dropout algorithm and evaluate the results on the OGB dataset.
+
+Original README follows:
+
 # The final code for OGB
 # Installation Requirements:
 1. ogb=1.3.1
